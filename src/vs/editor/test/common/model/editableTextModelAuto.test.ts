@@ -2,24 +2,17 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-'use strict';
 
-import assert = require('assert');
-import {Range} from 'vs/editor/common/core/range';
-import Position = require('vs/editor/common/core/position');
-import EditorCommon = require('vs/editor/common/editorCommon');
-import {EditableTextModel, IValidatedEditOperation} from 'vs/editor/common/model/editableTextModel';
-import {TextModel} from 'vs/editor/common/model/textModel';
-import {LineMarker, TextModelWithMarkers} from 'vs/editor/common/model/textModelWithMarkers';
-import {ILineMarker} from 'vs/editor/common/model/modelLine';
-import {MirrorModel2} from 'vs/editor/common/model/mirrorModel2';
-import {MirrorModel, IMirrorModelEvents} from 'vs/editor/common/model/mirrorModel';
-import {assertSyncedModels, testApplyEditsWithSyncedModels} from 'vs/editor/test/common/model/editableTextModelTestUtils';
+import { CharCode } from 'vs/base/common/charCode';
+import { Position } from 'vs/editor/common/core/position';
+import { Range } from 'vs/editor/common/core/range';
+import { IIdentifiedSingleEditOperation } from 'vs/editor/common/model';
+import { testApplyEditsWithSyncedModels } from 'vs/editor/test/common/model/editableTextModelTestUtils';
 
 const GENERATE_TESTS = false;
 
 suite('EditorModel Auto Tests', () => {
-	function editOp(startLineNumber: number, startColumn: number, endLineNumber: number, endColumn: number, text:string[]): EditorCommon.IIdentifiedSingleEditOperation {
+	function editOp(startLineNumber: number, startColumn: number, endLineNumber: number, endColumn: number, text: string[]): IIdentifiedSingleEditOperation {
 		return {
 			identifier: null,
 			range: new Range(startLineNumber, startColumn, endLineNumber, endColumn),
@@ -31,24 +24,24 @@ suite('EditorModel Auto Tests', () => {
 	test('auto1', () => {
 		testApplyEditsWithSyncedModels(
 			[
-					"ioe",
-					"",
-					"yjct",
-					"",
-					"",
+				'ioe',
+				'',
+				'yjct',
+				'',
+				'',
 			],
 			[
-				editOp(1, 2, 1, 2, ["b", "r", "fq"]),
-				editOp(1, 4, 2, 1, ["", ""]),
+				editOp(1, 2, 1, 2, ['b', 'r', 'fq']),
+				editOp(1, 4, 2, 1, ['', '']),
 			],
 			[
-					"ib",
-					"r",
-					"fqoe",
-					"",
-					"yjct",
-					"",
-					"",
+				'ib',
+				'r',
+				'fqoe',
+				'',
+				'yjct',
+				'',
+				'',
 			]
 		);
 	});
@@ -56,25 +49,25 @@ suite('EditorModel Auto Tests', () => {
 	test('auto2', () => {
 		testApplyEditsWithSyncedModels(
 			[
-					"f",
-					"littnhskrq",
-					"utxvsizqnk",
-					"lslqz",
-					"jxn",
-					"gmm",
+				'f',
+				'littnhskrq',
+				'utxvsizqnk',
+				'lslqz',
+				'jxn',
+				'gmm',
 			],
 			[
-					editOp(1, 2, 1, 2, ["", "o"]),
-					editOp(2, 4, 2, 4, ["zaq", "avb"]),
-					editOp(2, 5, 6, 2, ["jlr", "zl", "j"]),
+				editOp(1, 2, 1, 2, ['', 'o']),
+				editOp(2, 4, 2, 4, ['zaq', 'avb']),
+				editOp(2, 5, 6, 2, ['jlr', 'zl', 'j']),
 			],
 			[
-					"f",
-					"o",
-					"litzaq",
-					"avbtjlr",
-					"zl",
-					"jmm",
+				'f',
+				'o',
+				'litzaq',
+				'avbtjlr',
+				'zl',
+				'jmm',
 			]
 		);
 	});
@@ -82,31 +75,60 @@ suite('EditorModel Auto Tests', () => {
 	test('auto3', () => {
 		testApplyEditsWithSyncedModels(
 			[
-					"ofw",
-					"qsxmziuvzw",
-					"rp",
-					"qsnymek",
-					"elth",
-					"wmgzbwudxz",
-					"iwsdkndh",
-					"bujlbwb",
-					"asuouxfv",
-					"xuccnb",
+				'ofw',
+				'qsxmziuvzw',
+				'rp',
+				'qsnymek',
+				'elth',
+				'wmgzbwudxz',
+				'iwsdkndh',
+				'bujlbwb',
+				'asuouxfv',
+				'xuccnb',
 			],
 			[
-					editOp(4, 3, 4, 3, [""]),
+				editOp(4, 3, 4, 3, ['']),
 			],
 			[
-					"ofw",
-					"qsxmziuvzw",
-					"rp",
-					"qsnymek",
-					"elth",
-					"wmgzbwudxz",
-					"iwsdkndh",
-					"bujlbwb",
-					"asuouxfv",
-					"xuccnb",
+				'ofw',
+				'qsxmziuvzw',
+				'rp',
+				'qsnymek',
+				'elth',
+				'wmgzbwudxz',
+				'iwsdkndh',
+				'bujlbwb',
+				'asuouxfv',
+				'xuccnb',
+			]
+		);
+	});
+
+	test('auto4', () => {
+		testApplyEditsWithSyncedModels(
+			[
+				'fefymj',
+				'qum',
+				'vmiwxxaiqq',
+				'dz',
+				'lnqdgorosf',
+			],
+			[
+				editOp(1, 3, 1, 5, ['hp']),
+				editOp(1, 7, 2, 1, ['kcg', '', 'mpx']),
+				editOp(2, 2, 2, 2, ['', 'aw', '']),
+				editOp(2, 2, 2, 2, ['vqr', 'mo']),
+				editOp(4, 2, 5, 3, ['xyc']),
+			],
+			[
+				'fehpmjkcg',
+				'',
+				'mpxq',
+				'aw',
+				'vqr',
+				'moum',
+				'vmiwxxaiqq',
+				'dxycqdgorosf',
 			]
 		);
 	});
@@ -120,12 +142,12 @@ function getRandomString(minLength: number, maxLength: number): string {
 	let length = getRandomInt(minLength, maxLength);
 	let r = '';
 	for (let i = 0; i < length; i++) {
-		r += String.fromCharCode(getRandomInt('a'.charCodeAt(0), 'z'.charCodeAt(0)));
+		r += String.fromCharCode(getRandomInt(CharCode.a, CharCode.z));
 	}
 	return r;
 }
 
-function generateFile(small:boolean): string {
+function generateFile(small: boolean): string {
 	let lineCount = getRandomInt(1, small ? 3 : 10);
 	let lines: string[] = [];
 	for (let i = 0; i < lineCount; i++) {
@@ -134,9 +156,9 @@ function generateFile(small:boolean): string {
 	return lines.join('\n');
 }
 
-function generateEdits(content:string): ITestModelEdit[] {
+function generateEdits(content: string): ITestModelEdit[] {
 
-	let result:ITestModelEdit[] = [];
+	let result: ITestModelEdit[] = [];
 	let cnt = getRandomInt(1, 5);
 
 	let maxOffset = content.length;
@@ -145,14 +167,15 @@ function generateEdits(content:string): ITestModelEdit[] {
 
 		let offset = getRandomInt(0, maxOffset);
 		let length = getRandomInt(0, maxOffset - offset);
+		let text = generateFile(true);
 
 		result.push({
 			offset: offset,
 			length: length,
-			text: generateFile(true)
+			text: text
 		});
 
-		maxOffset = offset - 1;
+		maxOffset = offset;
 		cnt--;
 	}
 
@@ -171,39 +194,17 @@ class TestModel {
 
 	public initialContent: string;
 	public resultingContent: string;
-	public edits: EditorCommon.IIdentifiedSingleEditOperation[];
+	public edits: IIdentifiedSingleEditOperation[];
 
-	constructor() {
-		this.initialContent = generateFile(false);
-
-		let edits = generateEdits(this.initialContent);
-		let currentEditIdx = 0;
+	private static _generateOffsetToPosition(content: string): Position[] {
+		let result: Position[] = [];
 		let lineNumber = 1;
 		let column = 1;
 
-		let editStartPosition: Position.Position = null;
-		this.edits = [];
-		for (let offset = 0, len = this.initialContent.length; currentEditIdx < edits.length && offset <= len; offset++) {
-			let ch = this.initialContent.charAt(offset);
+		for (let offset = 0, len = content.length; offset <= len; offset++) {
+			let ch = content.charAt(offset);
 
-			if (!editStartPosition) {
-				if (offset === edits[currentEditIdx].offset) {
-					editStartPosition = new Position.Position(lineNumber, column);
-				}
-			}
-
-			if (editStartPosition) {
-				if (offset === edits[currentEditIdx].offset + edits[currentEditIdx].length) {
-					this.edits.push({
-						identifier: null,
-						range: new Range(editStartPosition.lineNumber, editStartPosition.column, lineNumber, column),
-						text: edits[currentEditIdx].text,
-						forceMoveMarkers: false
-					});
-					currentEditIdx++;
-					editStartPosition = null;
-				}
-			}
+			result[offset] = new Position(lineNumber, column);
 
 			if (ch === '\n') {
 				lineNumber++;
@@ -211,6 +212,25 @@ class TestModel {
 			} else {
 				column++;
 			}
+		}
+
+		return result;
+	}
+
+	constructor() {
+		this.initialContent = generateFile(false);
+
+		let edits = generateEdits(this.initialContent);
+
+		let offsetToPosition = TestModel._generateOffsetToPosition(this.initialContent);
+		this.edits = [];
+		for (const edit of edits) {
+			let startPosition = offsetToPosition[edit.offset];
+			let endPosition = offsetToPosition[edit.offset + edit.length];
+			this.edits.push({
+				range: new Range(startPosition.lineNumber, startPosition.column, endPosition.lineNumber, endPosition.column),
+				text: edit.text
+			});
 		}
 
 		this.resultingContent = this.initialContent;
@@ -228,17 +248,17 @@ class TestModel {
 		r.push('testApplyEditsWithSyncedModels(');
 		r.push('\t[');
 		let initialLines = this.initialContent.split('\n');
-		r = r.concat(initialLines.map((i) => `\t\t"${i}",`));
+		r = r.concat(initialLines.map((i) => `\t\t'${i}',`));
 		r.push('\t],');
 		r.push('\t[');
 		r = r.concat(this.edits.map((i) => {
-			let text = `["` + i.text.split('\n').join(`", "`) + `"]`;
+			let text = `['` + i.text!.split('\n').join(`', '`) + `']`;
 			return `\t\teditOp(${i.range.startLineNumber}, ${i.range.startColumn}, ${i.range.endLineNumber}, ${i.range.endColumn}, ${text}),`;
 		}));
 		r.push('\t],');
 		r.push('\t[');
 		let resultLines = this.resultingContent.split('\n');
-		r = r.concat(resultLines.map((i) => `\t\t"${i}",`));
+		r = r.concat(resultLines.map((i) => `\t\t'${i}',`));
 		r.push('\t]');
 		r.push(');');
 
@@ -248,13 +268,13 @@ class TestModel {
 
 if (GENERATE_TESTS) {
 	let number = 1;
-	while(true) {
+	while (true) {
 
 		console.log('------BEGIN NEW TEST: ' + number);
 
 		let testModel = new TestModel();
 
-		console.log(testModel.print());
+		// console.log(testModel.print());
 
 		console.log('------END NEW TEST: ' + (number++));
 
@@ -265,8 +285,8 @@ if (GENERATE_TESTS) {
 				testModel.resultingContent.split('\n')
 			);
 			// throw new Error('a');
-		} catch(err) {
-			console.log('bubu');
+		} catch (err) {
+			console.log(err);
 			console.log(testModel.print());
 			break;
 		}

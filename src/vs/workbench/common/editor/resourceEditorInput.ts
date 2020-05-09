@@ -2,194 +2,131 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-'use strict';
 
-import {TPromise} from 'vs/base/common/winjs.base';
-import {sequence} from 'vs/base/common/async';
-import {EditorModel, EditorInput} from 'vs/workbench/common/editor';
-import {ResourceEditorModel} from 'vs/workbench/common/editor/resourceEditorModel';
-import {IModel} from 'vs/editor/common/editorCommon';
-import URI from 'vs/base/common/uri';
-import {EventType} from 'vs/base/common/events';
-import {IInstantiationService} from 'vs/platform/instantiation/common/instantiation';
-import {IModelService} from 'vs/editor/common/services/modelService';
-import {IDisposable} from 'vs/base/common/lifecycle';
-
-/**
- *
- */
-export interface IResourceEditorContentProvider {
-	provideTextContent(resource: URI): TPromise<IModel>;
-}
+import { ITextEditorModel, IModeSupport, TextResourceEditorInput } from 'vs/workbench/common/editor';
+import { URI } from 'vs/base/common/uri';
+import { IReference } from 'vs/base/common/lifecycle';
+import { ITextModelService } from 'vs/editor/common/services/resolverService';
+import { ResourceEditorModel } from 'vs/workbench/common/editor/resourceEditorModel';
+import { ITextFileService } from 'vs/workbench/services/textfile/common/textfiles';
+import { IEditorService } from 'vs/workbench/services/editor/common/editorService';
+import { IEditorGroupsService } from 'vs/workbench/services/editor/common/editorGroupsService';
+import { IFileService } from 'vs/platform/files/common/files';
+import { ILabelService } from 'vs/platform/label/common/label';
+import { IFilesConfigurationService } from 'vs/workbench/services/filesConfiguration/common/filesConfigurationService';
 
 /**
  * A read-only text editor input whos contents are made of the provided resource that points to an existing
  * code editor model.
  */
-export class ResourceEditorInput extends EditorInput {
+export class ResourceEditorInput extends TextResourceEditorInput implements IModeSupport {
 
-	// --- registry logic
-	// todo@joh,ben this should maybe be a service that is in charge of loading/resolving a uri from a scheme
+	static readonly ID: string = 'workbench.editors.resourceEditorInput';
 
-	private static loadingModels: { [uri: string]: TPromise<IModel> } = Object.create(null);
-	private static registry: { [scheme: string]: IResourceEditorContentProvider[] } = Object.create(null);
-
-	public static registerResourceContentProvider(scheme: string, provider: IResourceEditorContentProvider): IDisposable {
-		let array = ResourceEditorInput.registry[scheme];
-		if (!array) {
-			array = [provider];
-			ResourceEditorInput.registry[scheme] = array;
-		} else {
-			array.unshift(provider);
-		}
-		return {
-			dispose() {
-				let array = ResourceEditorInput.registry[scheme];
-				let idx = array.indexOf(provider);
-				if (idx >= 0) {
-					array.splice(idx, 1);
-					if (array.length === 0) {
-						delete ResourceEditorInput.registry[scheme];
-					}
-				}
-			}
-		};
-	}
-
-	private static getOrCreateModel(modelService: IModelService, resource: URI): TPromise<IModel> {
-		const model = modelService.getModel(resource);
-		if (model) {
-			return TPromise.as(model);
-		}
-
-		let loadingModel = ResourceEditorInput.loadingModels[resource.toString()];
-		if (!loadingModel) {
-
-			// make sure we have a provider this scheme
-			// the resource uses
-			const array = ResourceEditorInput.registry[resource.scheme];
-			if (!array) {
-				return TPromise.wrapError(`No model with uri '${resource}' nor a resolver for the scheme '${resource.scheme}'.`);
-			}
-
-			// load the model-content from the provider and cache
-			// the loading such that we don't create the same model
-			// twice
-			ResourceEditorInput.loadingModels[resource.toString()] = loadingModel = new TPromise<IModel>((resolve, reject) => {
-
-				let result: IModel;
-				let lastError: any;
-
-				sequence(array.map(provider => {
-					return () => {
-						if (!result) {
-							return provider.provideTextContent(resource).then(value => {
-								result = value;
-							}, err => {
-								lastError = err;
-							});
-						}
-					};
-				})).then(() => {
-					if (!result && lastError) {
-						reject(lastError);
-					} else {
-						resolve(result);
-					}
-				}, reject);
-
-			}, function() {
-				// no cancellation when caching promises
-			});
-
-			// remove the cached promise 'cos the model is now
-			// known to the model service (see above)
-			loadingModel.then(() => delete ResourceEditorInput.loadingModels[resource.toString()], () => delete ResourceEditorInput.loadingModels[resource.toString()]);
-		}
-
-		return loadingModel;
-	}
-
-
-	public static ID: string = 'workbench.editors.resourceEditorInput';
-
-	protected cachedModel: ResourceEditorModel;
-	protected resource: URI;
-
-	private name: string;
-	private description: string;
+	private cachedModel: ResourceEditorModel | undefined = undefined;
+	private modelReference: Promise<IReference<ITextEditorModel>> | undefined = undefined;
 
 	constructor(
-		name: string,
-		description: string,
+		private name: string | undefined,
+		private description: string | undefined,
 		resource: URI,
-		@IModelService protected modelService: IModelService,
-		@IInstantiationService protected instantiationService: IInstantiationService
+		private preferredMode: string | undefined,
+		@ITextModelService private readonly textModelResolverService: ITextModelService,
+		@ITextFileService textFileService: ITextFileService,
+		@IEditorService editorService: IEditorService,
+		@IEditorGroupsService editorGroupService: IEditorGroupsService,
+		@IFileService fileService: IFileService,
+		@ILabelService labelService: ILabelService,
+		@IFilesConfigurationService filesConfigurationService: IFilesConfigurationService
 	) {
-		super();
-
-		this.name = name;
-		this.description = description;
-		this.resource = resource;
+		super(resource, editorService, editorGroupService, textFileService, labelService, fileService, filesConfigurationService);
 	}
 
-	public getId(): string {
+	getTypeId(): string {
 		return ResourceEditorInput.ID;
 	}
 
-	public getName(): string {
-		return this.name;
+	getName(): string {
+		return this.name || super.getName();
 	}
 
-	public getDescription(): string {
+	setName(name: string): void {
+		if (this.name !== name) {
+			this.name = name;
+			this._onDidChangeLabel.fire();
+		}
+	}
+
+	getDescription(): string | undefined {
 		return this.description;
 	}
 
-	public resolve(refresh?: boolean): TPromise<EditorModel> {
-
-		// Use Cached Model
-		if (this.cachedModel) {
-			return TPromise.as<EditorModel>(this.cachedModel);
+	setDescription(description: string): void {
+		if (this.description !== description) {
+			this.description = description;
+			this._onDidChangeLabel.fire();
 		}
-
-		// Otherwise Create Model and handle dispose event
-		return ResourceEditorInput.getOrCreateModel(this.modelService, this.resource).then(() => {
-			let model = this.instantiationService.createInstance(ResourceEditorModel, this.resource);
-			const unbind = model.addListener(EventType.DISPOSE, () => {
-				this.cachedModel = null; // make sure we do not dispose model again
-				unbind();
-				this.dispose();
-			});
-
-			// Load it
-			return model.load().then((resolvedModel: ResourceEditorModel) => {
-				this.cachedModel = resolvedModel;
-
-				return this.cachedModel;
-			});
-		});
 	}
 
-	public matches(otherInput: any): boolean {
+	setMode(mode: string): void {
+		this.setPreferredMode(mode);
+
+		if (this.cachedModel) {
+			this.cachedModel.setMode(mode);
+		}
+	}
+
+	setPreferredMode(mode: string): void {
+		this.preferredMode = mode;
+	}
+
+	async resolve(): Promise<ITextEditorModel> {
+		if (!this.modelReference) {
+			this.modelReference = this.textModelResolverService.createModelReference(this.resource);
+		}
+
+		const ref = await this.modelReference;
+
+		const model = ref.object;
+
+		// Ensure the resolved model is of expected type
+		if (!(model instanceof ResourceEditorModel)) {
+			ref.dispose();
+			this.modelReference = undefined;
+
+			throw new Error(`Unexpected model for ResourcEditorInput: ${this.resource}`);
+		}
+
+		this.cachedModel = model;
+
+		// Set mode if we have a preferred mode configured
+		if (this.preferredMode) {
+			model.setMode(this.preferredMode);
+		}
+
+		return model;
+	}
+
+	matches(otherInput: unknown): boolean {
 		if (super.matches(otherInput) === true) {
 			return true;
 		}
 
+		// Compare by properties
 		if (otherInput instanceof ResourceEditorInput) {
-			let otherResourceEditorInput = <ResourceEditorInput>otherInput;
-
-			// Compare by properties
-			return otherResourceEditorInput.resource.toString() === this.resource.toString();
+			return otherInput.resource.toString() === this.resource.toString();
 		}
 
 		return false;
 	}
 
-	public dispose(): void {
-		if (this.cachedModel) {
-			this.cachedModel.dispose();
-			this.cachedModel = null;
+	dispose(): void {
+		if (this.modelReference) {
+			this.modelReference.then(ref => ref.dispose());
+			this.modelReference = undefined;
 		}
+
+		this.cachedModel = undefined;
 
 		super.dispose();
 	}

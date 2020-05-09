@@ -3,20 +3,33 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-'use strict';
-
 import 'vs/css!./aria';
-import nls = require('vs/nls');
-import {Builder, $} from 'vs/base/browser/builder';
+import { isMacintosh } from 'vs/base/common/platform';
+import * as dom from 'vs/base/browser/dom';
 
-let ariaContainer: Builder;
-let alertContainer: Builder;
-let statusContainer: Builder;
+// Use a max length since we are inserting the whole msg in the DOM and that can cause browsers to freeze for long messages #94233
+const MAX_MESSAGE_LENGTH = 20000;
+let ariaContainer: HTMLElement;
+let alertContainer: HTMLElement;
+let statusContainer: HTMLElement;
 export function setARIAContainer(parent: HTMLElement) {
-	ariaContainer = $('.aria-container').appendTo(parent);
+	ariaContainer = document.createElement('div');
+	ariaContainer.className = 'monaco-aria-container';
 
-	alertContainer = $('.alert').appendTo(ariaContainer).attr({ 'role': 'alert', 'aria-atomic': 'true' });
-	statusContainer = $('.status').appendTo(ariaContainer).attr({ 'role': 'status', 'aria-atomic': 'true' });
+	alertContainer = document.createElement('div');
+	alertContainer.className = 'monaco-alert';
+	alertContainer.setAttribute('role', 'alert');
+	alertContainer.setAttribute('aria-atomic', 'true');
+	ariaContainer.appendChild(alertContainer);
+
+	statusContainer = document.createElement('div');
+	statusContainer.className = 'monaco-status';
+	statusContainer.setAttribute('role', 'complementary');
+	statusContainer.setAttribute('aria-live', 'polite');
+	statusContainer.setAttribute('aria-atomic', 'true');
+	ariaContainer.appendChild(statusContainer);
+
+	parent.appendChild(ariaContainer);
 }
 
 /**
@@ -30,19 +43,25 @@ export function alert(msg: string): void {
  * Given the provided message, will make sure that it is read as status to screen readers.
  */
 export function status(msg: string): void {
-	insertMessage(statusContainer, msg);
+	if (isMacintosh) {
+		alert(msg); // VoiceOver does not seem to support status role
+	} else {
+		insertMessage(statusContainer, msg);
+	}
 }
 
-function insertMessage(target: Builder, msg: string): void {
+function insertMessage(target: HTMLElement, msg: string): void {
 	if (!ariaContainer) {
-		console.warn('ARIA support needs a container. Call setARIAContainer() first.');
 		return;
 	}
 
-	if (target.getHTMLElement().textContent === msg) {
-		msg = nls.localize('repeated', "{0} (occurred again)", msg);
+	dom.clearNode(target);
+	if (msg.length > MAX_MESSAGE_LENGTH) {
+		msg = msg.substr(0, MAX_MESSAGE_LENGTH);
 	}
+	target.textContent = msg;
 
-	$(target).empty();
-	$(target).text(msg);
+	// See https://www.paciellogroup.com/blog/2012/06/html5-accessibility-chops-aria-rolealert-browser-support/
+	target.style.visibility = 'hidden';
+	target.style.visibility = 'visible';
 }

@@ -3,57 +3,81 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import {Registry} from 'vs/platform/platform';
-import {IPanel} from 'vs/workbench/common/panel';
-import {Composite, CompositeDescriptor, CompositeRegistry} from 'vs/workbench/browser/composite';
+import { Registry } from 'vs/platform/registry/common/platform';
+import { IPanel } from 'vs/workbench/common/panel';
+import { Composite, CompositeDescriptor, CompositeRegistry } from 'vs/workbench/browser/composite';
+import { IConstructorSignature0, BrandedService } from 'vs/platform/instantiation/common/instantiation';
+import { assertIsDefined } from 'vs/base/common/types';
+import { PaneComposite } from 'vs/workbench/browser/panecomposite';
 
 export abstract class Panel extends Composite implements IPanel { }
 
+export abstract class PaneCompositePanel extends PaneComposite implements IPanel { }
+
 /**
- * A panel descriptor is a leightweight descriptor of a panel in the monaco workbench.
+ * A panel descriptor is a leightweight descriptor of a panel in the workbench.
  */
 export class PanelDescriptor extends CompositeDescriptor<Panel> {
-	constructor(moduleId: string, ctorName: string, id: string, name: string, cssClass?: string) {
-		super(moduleId, ctorName, id, name, cssClass);
+
+	public static create<Services extends BrandedService[]>(ctor: { new(...services: Services): Panel }, id: string, name: string, cssClass?: string, order?: number, _commandId?: string): PanelDescriptor {
+		return new PanelDescriptor(ctor as IConstructorSignature0<Panel>, id, name, cssClass, order, _commandId);
+	}
+
+	private constructor(ctor: IConstructorSignature0<Panel>, id: string, name: string, cssClass?: string, order?: number, _commandId?: string) {
+		super(ctor, id, name, cssClass, order, _commandId);
 	}
 }
 
 export class PanelRegistry extends CompositeRegistry<Panel> {
-	private defaultPanelId: string;
+	private defaultPanelId: string | undefined;
 
 	/**
 	 * Registers a panel to the platform.
 	 */
-	public registerPanel(descriptor: PanelDescriptor): void {
+	registerPanel(descriptor: PanelDescriptor): void {
 		super.registerComposite(descriptor);
 	}
 
 	/**
-	 * Returns the panel descriptor for the given id or null if none.
+	 * Deregisters a panel to the platform.
 	 */
-	public getPanel(id: string): PanelDescriptor {
+	deregisterPanel(id: string): void {
+		super.deregisterComposite(id);
+	}
+
+	/**
+	 * Returns a panel by id.
+	 */
+	getPanel(id: string): PanelDescriptor | undefined {
 		return this.getComposite(id);
 	}
 
 	/**
 	 * Returns an array of registered panels known to the platform.
 	 */
-	public getPanels(): PanelDescriptor[] {
-		return this.getComposits();
+	getPanels(): PanelDescriptor[] {
+		return this.getComposites();
 	}
 
 	/**
 	 * Sets the id of the panel that should open on startup by default.
 	 */
-	public setDefaultPanelId(id: string): void {
+	setDefaultPanelId(id: string): void {
 		this.defaultPanelId = id;
 	}
 
 	/**
 	 * Gets the id of the panel that should open on startup by default.
 	 */
-	public getDefaultPanelId(): string {
-		return this.defaultPanelId;
+	getDefaultPanelId(): string {
+		return assertIsDefined(this.defaultPanelId);
+	}
+
+	/**
+	 * Find out if a panel exists with the provided ID.
+	 */
+	hasPanel(id: string): boolean {
+		return this.getPanels().some(panel => panel.id === id);
 	}
 }
 

@@ -3,63 +3,79 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-'use strict';
+export namespace Iterable {
 
-export interface IIterator<T> {
-	next(): T;
-}
-
-export class ArrayIterator<T> implements IIterator<T> {
-
-	private items: T[];
-	private start: number;
-	private end: number;
-	private index: number;
-
-	constructor(items: T[], start: number = 0, end: number = items.length) {
-		this.items = items;
-		this.start = start;
-		this.end = end;
-		this.index = start - 1;
+	const _empty: Iterable<any> = Object.freeze([]);
+	export function empty<T = any>(): Iterable<T> {
+		return _empty;
 	}
 
-	public next(): T {
-		this.index = Math.min(this.index + 1, this.end);
+	export function* single<T>(element: T): Iterable<T> {
+		yield element;
+	}
 
-		if (this.index === this.end) {
-			return null;
+	export function from<T>(iterable: Iterable<T> | undefined | null): Iterable<T> {
+		return iterable || _empty;
+	}
+
+	export function first<T>(iterable: Iterable<T>): T | undefined {
+		return iterable[Symbol.iterator]().next().value;
+	}
+
+	export function some<T>(iterable: Iterable<T>, predicate: (t: T) => boolean): boolean {
+		for (const element of iterable) {
+			if (predicate(element)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	export function* filter<T>(iterable: Iterable<T>, predicate: (t: T) => boolean): Iterable<T> {
+		for (const element of iterable) {
+			if (predicate(element)) {
+				yield element;
+			}
+		}
+	}
+
+	export function* map<T, R>(iterable: Iterable<T>, fn: (t: T) => R): Iterable<R> {
+		for (const element of iterable) {
+			yield fn(element);
+		}
+	}
+
+	export function* concat<T>(...iterables: Iterable<T>[]): Iterable<T> {
+		for (const iterable of iterables) {
+			for (const element of iterable) {
+				yield element;
+			}
+		}
+	}
+
+	/**
+	 * Consumes `atMost` elements from iterable and returns the consumed elements,
+	 * and an iterable for the rest of the elements.
+	 */
+	export function consume<T>(iterable: Iterable<T>, atMost: number = Number.POSITIVE_INFINITY): [T[], Iterable<T>] {
+		const consumed: T[] = [];
+
+		if (atMost === 0) {
+			return [consumed, iterable];
 		}
 
-		return this.items[this.index];
+		const iterator = iterable[Symbol.iterator]();
+
+		for (let i = 0; i < atMost; i++) {
+			const next = iterator.next();
+
+			if (next.done) {
+				return [consumed, Iterable.empty()];
+			}
+
+			consumed.push(next.value);
+		}
+
+		return [consumed, { [Symbol.iterator]() { return iterator; } }];
 	}
-}
-
-export class MappedIterator<T, R> implements IIterator<R> {
-
-	constructor(protected iterator: IIterator<T>, protected fn: (item:T)=>R) {
-		// noop
-	}
-
-	next() { return this.fn(this.iterator.next()); }
-}
-
-export interface INavigator<T> extends IIterator<T> {
-	current(): T;
-	previous(): T;
-	parent(): T;
-	first(): T;
-	last(): T;
-}
-
-export class MappedNavigator<T, R> extends MappedIterator<T, R> implements INavigator<R> {
-
-	constructor(protected navigator: INavigator<T>, fn: (item:T)=>R) {
-		super(navigator, fn);
-	}
-
-	current() { return this.fn(this.navigator.current()); }
-	previous() { return this.fn(this.navigator.previous()); }
-	parent() { return this.fn(this.navigator.parent()); }
-	first() { return this.fn(this.navigator.first()); }
-	last() { return this.fn(this.navigator.last()); }
 }

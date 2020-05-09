@@ -3,37 +3,15 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { IRange, Range } from 'vs/base/common/range';
+
 export interface IItem {
 	size: number;
-}
-
-export interface IRange {
-	start: number;
-	end: number;
 }
 
 export interface IRangedGroup {
 	range: IRange;
 	size: number;
-}
-
-/**
- * Returns the intersection between two ranges as a range itself.
- * Returns `null` if the intersection is empty.
- */
-export function intersect(one: IRange, other: IRange): IRange {
-	if (one.start >= other.end || other.start >= one.end) {
-		return null;
-	}
-
-	const start = Math.max(one.start, other.start);
-	const end = Math.min(one.end, other.end);
-
-	if (end - start <= 0) {
-		return null;
-	}
-
-	return { start, end };
 }
 
 /**
@@ -43,7 +21,7 @@ export function intersect(one: IRange, other: IRange): IRange {
 export function groupIntersect(range: IRange, groups: IRangedGroup[]): IRangedGroup[] {
 	const result: IRangedGroup[] = [];
 
-	for (const r of groups) {
+	for (let r of groups) {
 		if (range.start >= r.range.end) {
 			continue;
 		}
@@ -52,9 +30,9 @@ export function groupIntersect(range: IRange, groups: IRangedGroup[]): IRangedGr
 			break;
 		}
 
-		const intersection = intersect(range, r.range);
+		const intersection = Range.intersect(range, r.range);
 
-		if (!intersection) {
+		if (Range.isEmpty(intersection)) {
 			continue;
 		}
 
@@ -70,7 +48,7 @@ export function groupIntersect(range: IRange, groups: IRangedGroup[]): IRangedGr
 /**
  * Shifts a range by that `much`.
  */
-function shift({ start, end }: IRange, much: number): IRange {
+export function shift({ start, end }: IRange, much: number): IRange {
 	return { start: start + much, end: end + much };
 }
 
@@ -82,9 +60,9 @@ function shift({ start, end }: IRange, much: number): IRange {
  */
 export function consolidate(groups: IRangedGroup[]): IRangedGroup[] {
 	const result: IRangedGroup[] = [];
-	let previousGroup: IRangedGroup = null;
+	let previousGroup: IRangedGroup | null = null;
 
-	for (const group of groups) {
+	for (let group of groups) {
 		const start = group.range.start;
 		const end = group.range.end;
 		const size = group.size;
@@ -106,7 +84,7 @@ export function consolidate(groups: IRangedGroup[]): IRangedGroup[] {
  * collection.
  */
 function concat(...groups: IRangedGroup[][]): IRangedGroup[] {
-	return consolidate(groups.reduce((r, g) => r.concat(g), [] as IRangedGroup[]));
+	return consolidate(groups.reduce((r, g) => r.concat(g), []));
 }
 
 export class RangeMap {
@@ -114,7 +92,7 @@ export class RangeMap {
 	private groups: IRangedGroup[] = [];
 	private _size = 0;
 
-	splice(index: number, deleteCount: number, ...items: IItem[]): void {
+	splice(index: number, deleteCount: number, items: IItem[] = []): void {
 		const diff = items.length - deleteCount;
 		const before = groupIntersect({ start: 0, end: index }, this.groups);
 		const after = groupIntersect({ start: index + deleteCount, end: Number.POSITIVE_INFINITY }, this.groups)
@@ -160,7 +138,7 @@ export class RangeMap {
 		let index = 0;
 		let size = 0;
 
-		for (const group of this.groups) {
+		for (let group of this.groups) {
 			const count = group.range.end - group.range.start;
 			const newSize = size + (count * group.size);
 
@@ -194,7 +172,7 @@ export class RangeMap {
 		let position = 0;
 		let count = 0;
 
-		for (const group of this.groups) {
+		for (let group of this.groups) {
 			const groupCount = group.range.end - group.range.start;
 			const newCount = count + groupCount;
 
@@ -207,9 +185,5 @@ export class RangeMap {
 		}
 
 		return -1;
-	}
-
-	dispose() {
-		this.groups = null;
 	}
 }

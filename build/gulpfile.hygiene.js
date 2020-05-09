@@ -3,131 +3,225 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-var gulp = require('gulp');
-var filter = require('gulp-filter');
-var es = require('event-stream');
-var path = require('path');
-var tslint = require('gulp-tslint');
+'use strict';
 
-var all = [
+const gulp = require('gulp');
+const filter = require('gulp-filter');
+const es = require('event-stream');
+const gulpeslint = require('gulp-eslint');
+const tsfmt = require('typescript-formatter');
+const VinylFile = require('vinyl');
+const vfs = require('vinyl-fs');
+const path = require('path');
+const fs = require('fs');
+const pall = require('p-all');
+const task = require('./lib/task');
+
+/**
+ * Hygiene works by creating cascading subsets of all our files and
+ * passing them through a sequence of checks. Here are the current subsets,
+ * named according to the checks performed on them. Each subset contains
+ * the following one, as described in mathematical notation:
+ *
+ * all ⊃ eol ⊇ indentation ⊃ copyright ⊃ typescript
+ */
+
+const all = [
 	'*',
 	'build/**/*',
 	'extensions/**/*',
 	'scripts/**/*',
 	'src/**/*',
-	'test/**/*'
+	'test/**/*',
+	'!test/**/out/**',
+	'!**/node_modules/**'
 ];
 
-var eolFilter = [
+const indentationFilter = [
 	'**',
-	'!ThirdPartyNotices.txt',
-	'!LICENSE.txt',
-	'!extensions/**/out/**',
-	'!**/node_modules/**',
-	'!**/fixtures/**',
-	'!**/*.{svg,exe,png,scpt,bat,cmd,cur,ttf,woff,eot}',
-];
 
-var indentationFilter = [
-	'**',
+	// except specific files
 	'!ThirdPartyNotices.txt',
-	'!**/*.md',
-	'!**/*.template',
-	'!**/*.yml',
-	'!**/lib/**',
-	'!**/*.d.ts',
-	'!extensions/typescript/server/**',
-	'!test/assert.js',
+	'!LICENSE.{txt,rtf}',
+	'!LICENSES.chromium.html',
+	'!**/LICENSE',
+	'!src/vs/nls.js',
+	'!src/vs/nls.build.js',
+	'!src/vs/css.js',
+	'!src/vs/css.build.js',
+	'!src/vs/loader.js',
+	'!src/vs/base/common/insane/insane.js',
+	'!src/vs/base/common/marked/marked.js',
+	'!src/vs/base/node/terminateProcess.sh',
+	'!src/vs/base/node/cpuUsage.sh',
+	'!test/unit/assert.js',
+
+	// except specific folders
+	'!test/automation/out/**',
+	'!test/smoke/out/**',
+	'!extensions/vscode-api-tests/testWorkspace/**',
+	'!extensions/vscode-api-tests/testWorkspace2/**',
+	'!build/monaco/**',
+	'!build/win32/**',
+
+	// except multiple specific files
 	'!**/package.json',
-	'!**/npm-shrinkwrap.json',
-	'!**/octicons/**',
-	'!**/vs/languages/sass/test/common/example.scss',
-	'!**/vs/languages/less/common/parser/less.grammar.txt',
-	'!**/vs/languages/css/common/buildscripts/css-schema.xml',
-	'!**/vs/base/common/marked/raw.marked.js',
-	'!**/vs/base/common/winjs.base.raw.js',
-	'!**/vs/base/node/terminateProcess.sh',
-	'!**/vs/base/node/terminateProcess.sh',
-	'!**/vs/text.js',
-	'!**/vs/nls.js',
-	'!**/vs/css.js',
-	'!**/vs/loader.js',
+	'!**/yarn.lock',
+	'!**/yarn-error.log',
+
+	// except multiple specific folders
+	'!**/codicon/**',
+	'!**/fixtures/**',
+	'!**/lib/**',
+	'!extensions/**/out/**',
 	'!extensions/**/snippets/**',
 	'!extensions/**/syntaxes/**',
 	'!extensions/**/themes/**',
+	'!extensions/**/colorize-fixtures/**',
+
+	// except specific file types
+	'!src/vs/*/**/*.d.ts',
+	'!src/typings/**/*.d.ts',
+	'!extensions/**/*.d.ts',
+	'!**/*.{svg,exe,png,bmp,scpt,bat,cmd,cur,ttf,woff,eot,md,ps1,template,yaml,yml,d.ts.recipe,ico,icns,plist}',
+	'!build/{lib,download}/**/*.js',
+	'!build/**/*.sh',
+	'!build/azure-pipelines/**/*.js',
+	'!build/azure-pipelines/**/*.config',
+	'!**/Dockerfile',
+	'!**/Dockerfile.*',
+	'!**/*.Dockerfile',
+	'!**/*.dockerfile',
+	'!extensions/markdown-language-features/media/*.js'
 ];
 
-var copyrightFilter = [
+const copyrightFilter = [
 	'**',
 	'!**/*.desktop',
 	'!**/*.json',
 	'!**/*.html',
 	'!**/*.template',
-	'!**/test/**',
 	'!**/*.md',
 	'!**/*.bat',
 	'!**/*.cmd',
-	'!resources/win32/bin/code.js',
+	'!**/*.ico',
+	'!**/*.icns',
+	'!**/*.xml',
 	'!**/*.sh',
 	'!**/*.txt',
-	'!src/vs/editor/standalone-languages/swift.ts',
+	'!**/*.xpm',
+	'!**/*.opts',
+	'!**/*.disabled',
+	'!**/*.code-workspace',
+	'!**/*.js.map',
+	'!build/**/*.init',
+	'!resources/linux/snap/snapcraft.yaml',
+	'!resources/linux/snap/electron-launch',
+	'!resources/win32/bin/code.js',
+	'!resources/completions/**',
+	'!extensions/markdown-language-features/media/highlight.css',
+	'!extensions/html-language-features/server/src/modes/typescript/*',
+	'!extensions/*/server/bin/*',
+	'!src/vs/editor/test/node/classification/typescript-test.ts',
+	'!scripts/code-web.js'
 ];
 
-var tslintFilter = [
+const jsHygieneFilter = [
+	'src/**/*.js',
+	'build/gulpfile.*.js',
+	'!src/vs/loader.js',
+	'!src/vs/css.js',
+	'!src/vs/nls.js',
+	'!src/vs/css.build.js',
+	'!src/vs/nls.build.js',
+	'!src/**/insane.js',
+	'!src/**/marked.js',
+	'!**/test/**'
+];
+
+const tsHygieneFilter = [
 	'src/**/*.ts',
+	'test/**/*.ts',
 	'extensions/**/*.ts',
-	'!**/*.d.ts',
+	'!**/fixtures/**',
 	'!**/typings/**',
-	'!**/*.test.ts',
-	'!src/vs/editor/standalone-languages/test/**'
+	'!**/node_modules/**',
+	'!extensions/typescript-basics/test/colorize-fixtures/**',
+	'!extensions/vscode-api-tests/testWorkspace/**',
+	'!extensions/vscode-api-tests/testWorkspace2/**',
+	'!extensions/**/*.test.ts',
+	'!extensions/html-language-features/server/lib/jquery.d.ts'
 ];
 
-var copyrightHeader = [
+const copyrightHeaderLines = [
 	'/*---------------------------------------------------------------------------------------------',
 	' *  Copyright (c) Microsoft Corporation. All rights reserved.',
 	' *  Licensed under the MIT License. See License.txt in the project root for license information.',
 	' *--------------------------------------------------------------------------------------------*/'
-].join('\n');
+];
 
-/**
- * Reports tslint erros in the format:
- * src/helloWorld.c:5:3: warning: implicit declaration of function ‘prinft’
- */
-var lintReporter = function (output, file, options) {
-	var relativeBase = file.base.substring(file.cwd.length + 1).replace('\\', '/');
-	output.forEach(function (e) {
-		var message = relativeBase + e.name + ':' + (e.startPosition.line + 1) + ':' + (e.startPosition.character + 1) + ': ' + e.failure;
-		console.log('[tslint] ' + message);
-	});
-};
-
-gulp.task('tslint', function () {
-	return gulp.src(all, { base: '.' })
-		.pipe(filter(tslintFilter))
-		.pipe(tslint({ rulesDirectory: 'node_modules/tslint-microsoft-contrib' }))
-		.pipe(tslint.report(lintReporter, {
-			summarizeFailureOutput: false,
-			emitError: false
+gulp.task('eslint', () => {
+	return vfs.src(all, { base: '.', follow: true, allowEmpty: true })
+		.pipe(filter(jsHygieneFilter.concat(tsHygieneFilter)))
+		.pipe(gulpeslint({
+			configFile: '.eslintrc.json',
+			rulePaths: ['./build/lib/eslint']
+		}))
+		.pipe(gulpeslint.formatEach('compact'))
+		.pipe(gulpeslint.results(results => {
+			if (results.warningCount > 0 || results.errorCount > 0) {
+				throw new Error('eslint failed with warnings and/or errors');
+			}
 		}));
 });
 
-var hygiene = exports.hygiene = function (some) {
-	var errorCount = 0;
+function checkPackageJSON(actualPath) {
+	const actual = require(path.join(__dirname, '..', actualPath));
+	const rootPackageJSON = require('../package.json');
 
-	var eol = es.through(function (file) {
-		if (/\r\n?/g.test(file.contents.toString('utf8'))) {
-			console.error(file.relative + ': Bad EOL found');
+	for (let depName in actual.dependencies) {
+		const depVersion = actual.dependencies[depName];
+		const rootDepVersion = rootPackageJSON.dependencies[depName];
+		if (!rootDepVersion) {
+			// missing in root is allowed
+			continue;
+		}
+		if (depVersion !== rootDepVersion) {
+			this.emit('error', `The dependency ${depName} in '${actualPath}' (${depVersion}) is different than in the root package.json (${rootDepVersion})`);
+		}
+	}
+}
+
+const checkPackageJSONTask = task.define('check-package-json', () => {
+	return gulp.src('package.json')
+		.pipe(es.through(function () {
+			checkPackageJSON.call(this, 'remote/package.json');
+			checkPackageJSON.call(this, 'remote/web/package.json');
+		}));
+});
+gulp.task(checkPackageJSONTask);
+
+
+function hygiene(some) {
+	let errorCount = 0;
+
+	const productJson = es.through(function (file) {
+		const product = JSON.parse(file.contents.toString('utf8'));
+
+		if (product.extensionsGallery) {
+			console.error('product.json: Contains "extensionsGallery"');
 			errorCount++;
 		}
 
 		this.emit('data', file);
 	});
 
-	var indentation = es.through(function (file) {
-		file.contents
-			.toString('utf8')
-			.split(/\r\n|\r|\n/)
-			.forEach(function (line, i) {
+	const indentation = es.through(function (file) {
+		const lines = file.contents.toString('utf8').split(/\r\n|\r|\n/);
+		file.__lines = lines;
+
+		lines
+			.forEach((line, i) => {
 				if (/^\s*$/.test(line)) {
 					// empty or whitespace lines are OK
 				} else if (/^[\t]*[^\s]/.test(line)) {
@@ -143,54 +237,183 @@ var hygiene = exports.hygiene = function (some) {
 		this.emit('data', file);
 	});
 
-	var copyrights = es.through(function (file) {
-		if (file.contents.toString('utf8').indexOf(copyrightHeader) !== 0) {
-			console.error(file.relative + ': Missing or bad copyright statement');
-			errorCount++;
+	const copyrights = es.through(function (file) {
+		const lines = file.__lines;
+
+		for (let i = 0; i < copyrightHeaderLines.length; i++) {
+			if (lines[i] !== copyrightHeaderLines[i]) {
+				console.error(file.relative + ': Missing or bad copyright statement');
+				errorCount++;
+				break;
+			}
 		}
 
 		this.emit('data', file);
 	});
 
-	return gulp.src(some || all, { base: '.' })
-		.pipe(filter(function (f) { return !f.stat.isDirectory(); }))
-		.pipe(filter(eolFilter))
-		.pipe(eol)
+	const formatting = es.map(function (file, cb) {
+		tsfmt.processString(file.path, file.contents.toString('utf8'), {
+			verify: false,
+			tsfmt: true,
+			// verbose: true,
+			// keep checkJS happy
+			editorconfig: undefined,
+			replace: undefined,
+			tsconfig: undefined,
+			tsconfigFile: undefined,
+			tsfmtFile: undefined,
+			vscode: undefined,
+			vscodeFile: undefined
+		}).then(result => {
+			let original = result.src.replace(/\r\n/gm, '\n');
+			let formatted = result.dest.replace(/\r\n/gm, '\n');
+
+			if (original !== formatted) {
+				console.error('File not formatted. Run the \'Format Document\' command to fix it:', file.relative);
+				errorCount++;
+			}
+			cb(null, file);
+
+		}, err => {
+			cb(err);
+		});
+	});
+
+	let input;
+
+	if (Array.isArray(some) || typeof some === 'string' || !some) {
+		const options = { base: '.', follow: true, allowEmpty: true };
+		if (some) {
+			input = vfs.src(some, options).pipe(filter(all)); // split this up to not unnecessarily filter all a second time
+		} else {
+			input = vfs.src(all, options);
+		}
+	} else {
+		input = some;
+	}
+
+	const productJsonFilter = filter('product.json', { restore: true });
+
+	const result = input
+		.pipe(filter(f => !f.stat.isDirectory()))
+		.pipe(productJsonFilter)
+		.pipe(process.env['BUILD_SOURCEVERSION'] ? es.through() : productJson)
+		.pipe(productJsonFilter.restore)
 		.pipe(filter(indentationFilter))
 		.pipe(indentation)
 		.pipe(filter(copyrightFilter))
-		.pipe(copyrights)
-		.pipe(es.through(null, function () {
+		.pipe(copyrights);
+
+	const typescript = result
+		.pipe(filter(tsHygieneFilter))
+		.pipe(formatting);
+
+	const javascript = result
+		.pipe(filter(jsHygieneFilter.concat(tsHygieneFilter)))
+		.pipe(gulpeslint({
+			configFile: '.eslintrc.json',
+			rulePaths: ['./build/lib/eslint']
+		}))
+		.pipe(gulpeslint.formatEach('compact'))
+		.pipe(gulpeslint.results(results => {
+			errorCount += results.warningCount;
+			errorCount += results.errorCount;
+		}));
+
+	let count = 0;
+	return es.merge(typescript, javascript)
+		.pipe(es.through(function (data) {
+			count++;
+			if (process.env['TRAVIS'] && count % 10 === 0) {
+				process.stdout.write('.');
+			}
+			this.emit('data', data);
+		}, function () {
+			process.stdout.write('\n');
 			if (errorCount > 0) {
 				this.emit('error', 'Hygiene failed with ' + errorCount + ' errors. Check \'build/gulpfile.hygiene.js\'.');
 			} else {
 				this.emit('end');
 			}
 		}));
-};
+}
 
-gulp.task('hygiene', function () {
-	return hygiene();
-});
+function createGitIndexVinyls(paths) {
+	const cp = require('child_process');
+	const repositoryPath = process.cwd();
 
-// this allows us to run this as a git pre-commit hook
+	const fns = paths.map(relativePath => () => new Promise((c, e) => {
+		const fullPath = path.join(repositoryPath, relativePath);
+
+		fs.stat(fullPath, (err, stat) => {
+			if (err && err.code === 'ENOENT') { // ignore deletions
+				return c(null);
+			} else if (err) {
+				return e(err);
+			}
+
+			cp.exec(`git show :${relativePath}`, { maxBuffer: 2000 * 1024, encoding: 'buffer' }, (err, out) => {
+				if (err) {
+					return e(err);
+				}
+
+				c(new VinylFile({
+					path: fullPath,
+					base: repositoryPath,
+					contents: out,
+					stat
+				}));
+			});
+		});
+	}));
+
+	return pall(fns, { concurrency: 4 })
+		.then(r => r.filter(p => !!p));
+}
+
+gulp.task('hygiene', task.series(checkPackageJSONTask, () => hygiene()));
+
+// this allows us to run hygiene as a git pre-commit hook
 if (require.main === module) {
-	var cp = require('child_process');
-	cp.exec('git diff --cached --name-only', function (err, out) {
-		if (err) {
-			console.error();
-			console.error(err);
-			process.exit(1);
-		}
+	const cp = require('child_process');
 
-		var some = out
-			.split(/\r?\n/)
-			.filter(function (l) { return !!l; });
+	process.on('unhandledRejection', (reason, p) => {
+		console.log('Unhandled Rejection at: Promise', p, 'reason:', reason);
+		process.exit(1);
+	});
 
-		hygiene(some).on('error', function (err) {
+	if (process.argv.length > 2) {
+		hygiene(process.argv.slice(2)).on('error', err => {
 			console.error();
 			console.error(err);
 			process.exit(1);
 		});
-	});
+	} else {
+		cp.exec('git diff --cached --name-only', { maxBuffer: 2000 * 1024 }, (err, out) => {
+			if (err) {
+				console.error();
+				console.error(err);
+				process.exit(1);
+				return;
+			}
+
+			const some = out
+				.split(/\r?\n/)
+				.filter(l => !!l);
+
+			if (some.length > 0) {
+				console.log('Reading git index versions...');
+
+				createGitIndexVinyls(some)
+					.then(vinyls => new Promise((c, e) => hygiene(es.readArray(vinyls))
+						.on('end', () => c())
+						.on('error', e)))
+					.catch(err => {
+						console.error();
+						console.error(err);
+						process.exit(1);
+					});
+			}
+		});
+	}
 }

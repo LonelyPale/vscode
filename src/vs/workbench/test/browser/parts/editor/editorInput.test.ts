@@ -3,30 +3,20 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-'use strict';
-
 import * as assert from 'assert';
-import {EditorInput} from 'vs/workbench/common/editor';
-import {EditorDescriptor} from 'vs/workbench/browser/parts/editor/baseEditor';
-import {DiffEditorInput} from 'vs/workbench/common/editor/diffEditorInput';
+import { EditorInput } from 'vs/workbench/common/editor';
+import { DiffEditorInput } from 'vs/workbench/common/editor/diffEditorInput';
 
 class MyEditorInput extends EditorInput {
-	getMime() {
-		return 'text/css';
-	}
+	readonly resource = undefined;
 
-	public getId(): string {
-		return '';
-	}
-
-	public resolve(refresh?: boolean): any {
-		return null;
-	}
+	getTypeId(): string { return ''; }
+	resolve(): any { return null; }
 }
 
-suite("Workbench - EditorInput", () => {
+suite('Workbench editor input', () => {
 
-	test("EditorInput", function() {
+	test('EditorInput', () => {
 		let counter = 0;
 		let input = new MyEditorInput();
 		let otherInput = new MyEditorInput();
@@ -34,9 +24,9 @@ suite("Workbench - EditorInput", () => {
 		assert(input.matches(input));
 		assert(!input.matches(otherInput));
 		assert(!input.matches(null));
-		assert(!input.getName());
+		assert(input.getName());
 
-		input.addListener("dispose", function() {
+		input.onDispose(() => {
 			assert(true);
 			counter++;
 		});
@@ -45,39 +35,39 @@ suite("Workbench - EditorInput", () => {
 		assert.equal(counter, 1);
 	});
 
-	test("DiffEditorInput", function() {
+	test('DiffEditorInput', () => {
 		let counter = 0;
 		let input = new MyEditorInput();
-		input.addListener("dispose", function() {
+		input.onDispose(() => {
 			assert(true);
 			counter++;
 		});
 
 		let otherInput = new MyEditorInput();
-		otherInput.addListener("dispose", function() {
+		otherInput.onDispose(() => {
 			assert(true);
 			counter++;
 		});
 
-		let diffInput = new DiffEditorInput("name", "description", input, otherInput);
+		let diffInput = new DiffEditorInput('name', 'description', input, otherInput);
 
-		assert.equal(diffInput.getOriginalInput(), input);
-		assert.equal(diffInput.getModifiedInput(), otherInput);
+		assert.equal(diffInput.originalInput, input);
+		assert.equal(diffInput.modifiedInput, otherInput);
 		assert(diffInput.matches(diffInput));
 		assert(!diffInput.matches(otherInput));
 		assert(!diffInput.matches(null));
 
 		diffInput.dispose();
-		assert.equal(counter, 2);
+		assert.equal(counter, 0);
 	});
 
-	test("DiffEditorInput disposes when input inside disposes", function() {
+	test('DiffEditorInput disposes when input inside disposes', function () {
 		let counter = 0;
 		let input = new MyEditorInput();
 		let otherInput = new MyEditorInput();
 
-		let diffInput = new DiffEditorInput("name", "description", input, otherInput);
-		diffInput.addListener("dispose", function() {
+		let diffInput = new DiffEditorInput('name', 'description', input, otherInput);
+		diffInput.onDispose(() => {
 			counter++;
 			assert(true);
 		});
@@ -87,8 +77,8 @@ suite("Workbench - EditorInput", () => {
 		input = new MyEditorInput();
 		otherInput = new MyEditorInput();
 
-		let diffInput2 = new DiffEditorInput("name", "description", input, otherInput);
-		diffInput2.addListener("dispose", function() {
+		let diffInput2 = new DiffEditorInput('name', 'description', input, otherInput);
+		diffInput2.onDispose(() => {
 			counter++;
 			assert(true);
 		});

@@ -2,104 +2,74 @@
  *  Copyright (c) Microsoft Corporation. All rights reserved.
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
-'use strict';
+import * as assert from 'assert';
+import { computeRanges } from 'vs/editor/contrib/folding/indentRangeProvider';
+import { createTextModel } from 'vs/editor/test/common/editorTestUtils';
 
-import assert = require('assert');
-import foldStrategy = require('vs/editor/contrib/folding/common/indentFoldStrategy');
-import {IFoldingRange} from 'vs/editor/contrib/folding/common/foldingRange';
-import {Model} from 'vs/editor/common/model/model';
+interface IndentRange {
+	start: number;
+	end: number;
+}
 
-suite('Folding', () => {
-	function assertRanges(lines: string[], tabSize: number, expected:IFoldingRange[]): void {
-		let model = new Model(lines.join('\n'), null);
-		let actual = foldStrategy.computeRanges(model, tabSize);
-		actual.sort((r1, r2) => r1.startLineNumber - r2.startLineNumber);
-		assert.deepEqual(actual, expected);
-		model.dispose();
+suite('Indentation Folding', () => {
+	function r(start: number, end: number): IndentRange {
+		return { start, end };
 	}
 
-	function r(startLineNumber: number, endLineNumber: number): IFoldingRange {
-		return { startLineNumber, endLineNumber };
-	}
+	test('Limit by indent', () => {
 
-	test('t1', () => {
-		assertRanges([
-			'A',
-			'  A',
-			'  A',
-			'  A'
-		], 4, [r(1, 4)]);
+
+		let lines = [
+		/* 1*/	'A',
+		/* 2*/	'  A',
+		/* 3*/	'  A',
+		/* 4*/	'    A',
+		/* 5*/	'      A',
+		/* 6*/	'    A',
+		/* 7*/	'      A',
+		/* 8*/	'      A',
+		/* 9*/	'         A',
+		/* 10*/	'      A',
+		/* 11*/	'         A',
+		/* 12*/	'  A',
+		/* 13*/	'              A',
+		/* 14*/	'                 A',
+		/* 15*/	'A',
+		/* 16*/	'  A'
+		];
+		let r1 = r(1, 14); //0
+		let r2 = r(3, 11); //1
+		let r3 = r(4, 5); //2
+		let r4 = r(6, 11); //2
+		let r5 = r(8, 9); //3
+		let r6 = r(10, 11); //3
+		let r7 = r(12, 14); //1
+		let r8 = r(13, 14);//4
+		let r9 = r(15, 16);//0
+
+		let model = createTextModel(lines.join('\n'));
+
+		function assertLimit(maxEntries: number, expectedRanges: IndentRange[], message: string) {
+			let indentRanges = computeRanges(model, true, undefined, maxEntries);
+			assert.ok(indentRanges.length <= maxEntries, 'max ' + message);
+			let actual: IndentRange[] = [];
+			for (let i = 0; i < indentRanges.length; i++) {
+				actual.push({ start: indentRanges.getStartLineNumber(i), end: indentRanges.getEndLineNumber(i) });
+			}
+			assert.deepEqual(actual, expectedRanges, message);
+		}
+
+		assertLimit(1000, [r1, r2, r3, r4, r5, r6, r7, r8, r9], '1000');
+		assertLimit(9, [r1, r2, r3, r4, r5, r6, r7, r8, r9], '9');
+		assertLimit(8, [r1, r2, r3, r4, r5, r6, r7, r9], '8');
+		assertLimit(7, [r1, r2, r3, r4, r5, r7, r9], '7');
+		assertLimit(6, [r1, r2, r3, r4, r7, r9], '6');
+		assertLimit(5, [r1, r2, r3, r7, r9], '5');
+		assertLimit(4, [r1, r2, r7, r9], '4');
+		assertLimit(3, [r1, r2, r9], '3');
+		assertLimit(2, [r1, r9], '2');
+		assertLimit(1, [r1], '1');
+		assertLimit(0, [], '0');
 	});
 
-	test('t2', () => {
-		assertRanges([
-			'A',
-			'  A',
-			'  A',
-			'    A',
-			'    A'
-		], 4, [r(1, 5), r(3, 5)] );
-	});
-
-	test('t3', () => {
-		assertRanges([
-			'A',
-			'  A',
-			'    A',
-			'      A',
-			'A'
-		], 4, [r(1, 4), r(2, 4), r(3, 4)] );
-	});
-
-	test('t4', () => {
-		assertRanges([
-			'    A',
-			'  A',
-			'A'
-		], 4, [] );
-	});
-
-	test('Java', () => {
-		assertRanges([
-		/* 1*/	'class A {',
-		/* 2*/	'  void foo() {',
-		/* 3*/	'    console.log();',
-		/* 4*/	'    console.log();',
-		/* 5*/	'  }',
-		/* 6*/	'',
-		/* 7*/	'  void bar() {',
-		/* 8*/	'    console.log();',
-		/* 9*/	'  }',
-		/*10*/	'}',
-		/*11*/	'interface B {',
-		/*12*/	'  void bar();',
-		/*13*/	'}',
-		], 4, [r(1, 9), r(2, 4), r(7, 8), r(11, 12)] );
-	});
-
-	test('Javadoc', () => {
-		assertRanges([
-		/* 1*/	'/**',
-		/* 2*/	' * Comment',
-		/* 3*/	' */',
-		/* 4*/	'class A {',
-		/* 5*/	'  void foo() {',
-		/* 6*/	'  }',
-		/* 7*/	'}',
-		], 4, [r(1, 3), r(4, 6)] );
-	});
-	test('Whitespace', () => {
-		assertRanges([
-		/* 1*/	'class A {',
-		/* 2*/	'',
-		/* 3*/	'  void foo() {',
-		/* 4*/	'     ',
-		/* 5*/	'     return 0;',
-		/* 6*/	'  }',
-		/* 7*/	'      ',
-		/* 8*/	'}',
-		], 4, [r(1, 7), r(3, 5)] );
-	});
-
-
-})
+});

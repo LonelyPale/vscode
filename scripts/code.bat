@@ -1,31 +1,49 @@
 @echo off
+setlocal
+
 title VSCode Dev
 
 pushd %~dp0\..
 
 :: Node modules
-if not exist node_modules call .\scripts\npm.bat install
+if not exist node_modules call yarn
+
+for /f "tokens=2 delims=:," %%a in ('findstr /R /C:"\"nameShort\":.*" product.json') do set NAMESHORT=%%~a
+set NAMESHORT=%NAMESHORT: "=%
+set NAMESHORT=%NAMESHORT:"=%.exe
+set CODE=".build\electron\%NAMESHORT%"
 
 :: Get electron
-node .\node_modules\gulp\bin\gulp.js electron
+call yarn electron
+
+:: Manage built-in extensions
+if "%1"=="--builtin" goto builtin
+
+:: Sync built-in extensions
+node build\lib\builtInExtensions.js
 
 :: Build
-if not exist out node .\node_modules\gulp\bin\gulp.js compile
+if not exist out yarn compile
 
 :: Configuration
 set NODE_ENV=development
 set VSCODE_DEV=1
-set ELECTRON_DEFAULT_ERROR_MODE=1
+set VSCODE_CLI=1
+REM set ELECTRON_DEFAULT_ERROR_MODE=1 TODO@ben to investigate if this helps with builds reporting stacks if renderer crashes
 set ELECTRON_ENABLE_LOGGING=1
 set ELECTRON_ENABLE_STACK_DUMPING=1
+set VSCODE_LOGS=
 
 :: Launch Code
-.\.build\electron\electron.exe . %*
+
+%CODE% . %*
+goto end
+
+:builtin
+%CODE% build/builtin
+
+:end
+
 popd
 
-:: Unset environment variables after we are done
-set NODE_ENV=
-set VSCODE_DEV=
-set ELECTRON_DEFAULT_ERROR_MODE=
-set ELECTRON_ENABLE_LOGGING=
-set ELECTRON_ENABLE_STACK_DUMPING=
+endlocal
